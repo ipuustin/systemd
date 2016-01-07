@@ -96,7 +96,7 @@ unsigned long cap_last_cap(void) {
         return p;
 }
 
-int capability_bounding_set_drop(uint64_t drop, bool right_now) {
+int capability_bounding_set_drop(uint64_t set, bool right_now) {
         _cleanup_cap_free_ cap_t after_cap = NULL;
         cap_flag_value_t fv;
         unsigned long i;
@@ -137,7 +137,7 @@ int capability_bounding_set_drop(uint64_t drop, bool right_now) {
 
         for (i = 0; i <= cap_last_cap(); i++) {
 
-                if (drop & ((uint64_t) 1ULL << (uint64_t) i)) {
+                if (!(set & ((uint64_t) 1ULL << (uint64_t) i))) {
                         cap_value_t v;
 
                         /* Drop it from the bounding set */
@@ -176,7 +176,7 @@ finish:
         return r;
 }
 
-static int drop_from_file(const char *fn, uint64_t drop) {
+static int drop_from_file(const char *fn, uint64_t set) {
         int r, k;
         uint32_t hi, lo;
         uint64_t current, after;
@@ -196,7 +196,7 @@ static int drop_from_file(const char *fn, uint64_t drop) {
                 return -EIO;
 
         current = (uint64_t) lo | ((uint64_t) hi << 32ULL);
-        after = current & ~drop;
+        after = current & set;
 
         if (current == after)
                 return 0;
@@ -213,14 +213,14 @@ static int drop_from_file(const char *fn, uint64_t drop) {
         return r;
 }
 
-int capability_bounding_set_drop_usermode(uint64_t drop) {
+int capability_bounding_set_drop_usermode(uint64_t set) {
         int r;
 
-        r = drop_from_file("/proc/sys/kernel/usermodehelper/inheritable", drop);
+        r = drop_from_file("/proc/sys/kernel/usermodehelper/inheritable", set);
         if (r < 0)
                 return r;
 
-        r = drop_from_file("/proc/sys/kernel/usermodehelper/bset", drop);
+        r = drop_from_file("/proc/sys/kernel/usermodehelper/bset", set);
         if (r < 0)
                 return r;
 
@@ -257,7 +257,7 @@ int drop_privileges(uid_t uid, gid_t gid, uint64_t keep_capabilities) {
                 return log_error_errno(errno, "Failed to disable keep capabilities flag: %m");
 
         /* Drop all caps from the bounding set, except the ones we want */
-        r = capability_bounding_set_drop(~keep_capabilities, true);
+        r = capability_bounding_set_drop(keep_capabilities, true);
         if (r < 0)
                 return log_error_errno(r, "Failed to drop capabilities: %m");
 
